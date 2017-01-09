@@ -1,5 +1,7 @@
-#d3.ForceBundle 
-*Corneliu S.*
+ 
+*Johnson Keiriz*
+
+The code in this repo is inspired from https://github.com/upphiminn/d3.ForceBundle
 ##### Javascript Force Edge Bundling for d3.js
 ![](readme_img/comp.png) 
 ---
@@ -9,6 +11,9 @@ Node-link graphs with many edges and nodes suffer from visual clutter, edge-bund
 #### Force Edge Bundling
 **Force edge bundling** **[3]** works by modelling edges between nodes as flexible springs which can attract each other if certain geometrical compatibility criterions are met. 
 The input for the algorithm is a simple node-link diagram of a graph with nodes and edges. In order to change the shape of the basic straight line edges between nodes, the algorithm proceeds by subdividing edges into segments. Attraction *spring* forces are simulated between each pair of consecutive subdivision points on the same graph-edge. Moreover, attraction *electrostatic* forces are computed between subpoints of different edges which are geometrically compatible. The combined force acting on each subdivision point is computed and the points are moved a certain step size in the direction of the force. The force-simulation on these sub-points is repeted a certain amout of iterations. After the end of a cycle of iterations the resulting graph-edges are divided again in smaller segements and the whole process repeats itself until the end cycle is reached. It's important to note that the position of original node-points are fixed throughout the simulation.
+This repo contains 2 implementations of the FEB algorithm:
+1) A 2X speed-up version of the CPU-based edge bundling implementation found in https://github.com/upphiminn/d3.ForceBundle.
+2) A WebGL-based implementation based on the Jieting Wu et.al. publication [4].
 #### Parameters Tuning
 #####Fixed Parameters 
 A certain number of parameters have been fixed to specific optimized values as found through experimentation by the authors. These include the spring constants **K** (=0.1), which controls the amount of bundling by controling the stiffness of edges. The number of iterations for simulating force interactions **I** (=60) and the number of cycles of subdivision-force simulation iterations **C** (=6). Moreover, the initial number of division points **P** is set to 1 and the rate at which it increases set to 2. The rate of the number of iterations **I** decreases each cycle is set to **2/3**.
@@ -29,10 +34,16 @@ The **most important parameter** is the **initial step size** used to move the s
 
 
 ##Usage
-###Import The Plugin 
+###Import The Plugin
+ For the CPU-based version:
 ```html
 	<script type="text/javascript" src="d3-ForceEdgeBundling.js"></script>
 ```
+ For the WebGl-based version:
+```html
+	<script type="text/javascript" src="gpu-forcebundling.js"></script>
+```
+
 ###Input Data
 ####Node Data
 The Nodes and their positions are stored by their id in a basic dictionary.
@@ -77,14 +88,14 @@ The algorithm outputs an array of arrays of subdivision points obtained on the l
 		  {"x":598.9402957673196, "y":296.5373242419396}]
         ]
 ```
-###Running the algorithm
+###Running the CPU-based algorithm
 ####With Default Parameters Values:
 ```javascript
 	var fbundling = d3.ForceEdgeBundling()
 				.nodes(node_data)
 				.edges(edge_data);
 	var results   = fbundling();	
-```	
+```
 ####With Custom Parameters Values
 ```javascript
 	var fbundling = d3.ForceEdgeBundling()
@@ -93,7 +104,26 @@ The algorithm outputs an array of arrays of subdivision points obtained on the l
 				.nodes(node_data)
 				.edges(edge_data);
 	var results   = fbundling();	  
-```	
+```
+
+###Running the WebGl-based algorithm
+####With Default Parameters Values:
+```javascript
+	var fbundling = d3.GPUForceEdgeBundling()
+				.nodes(node_data)
+				.edges(edge_data);
+	var results   = fbundling();	
+```
+####With Custom Parameters Values:
+```javascript
+	var fbundling = d3.GPUForceEdgeBundling()
+				.step_size(0.2)
+				.compatibility_threshold(0.9)
+				.nodes(node_data)
+				.edges(edge_data);
+	var results   = fbundling();	  
+```
+
 ###How To Plot
 Plotting can be done by using standard *d3* methods i.e. drawing lines between each of the subdivision subpoints for each the initial graph edges. Since there is no support for advanced blending modes in **SVG** yet we use the *stroke-opacity* to mark overlapping segments.
 ```javascript
@@ -114,23 +144,11 @@ Plotting can be done by using standard *d3* methods i.e. drawing lines between e
         });
 ```        
 ##Example
-#### Live Demo
-[Live Demo on bl.ocks.org](http://bl.ocks.org/upphiminn/6515478)
-
-
-OR see source code in **example/airline_routes.html**.
+see source code in **example/airline_routes.html**.
 ##### Node-Link
 ![](readme_img/airline_node_link_graph.png) 
 ##### After FDEB 
 ![](readme_img/airline_graph.png) 
-
-
-## Future Extentions
-
-- Barnes-Hut methods to optimize force calculations. 
-- Use a color gradient to color edge subsegments with respect to number of overlapping subedges.
-- Add edge smoothing support for subdivision points using a Gaussian kernels. 
-- Automatical intialization with optimum step size with respect to given graph.
 
 ## Paper References
 
@@ -140,3 +158,5 @@ OR see source code in **example/airline_routes.html**.
 [2] Holten, Danny. "Hierarchical edge bundles: Visualization of adjacency relations in hierarchical data." Visualization and Computer Graphics, IEEE Transactions 12, no. 5 (2006): 741-748.
 
 [3] Holten, Danny, and Jarke J. Van Wijk. "Force‐Directed Edge Bundling for Graph Visualization." Computer Graphics Forum (Blackwell Publishing Ltd) 28, no. 3 (2009): 983-990.
+
+[4] Wu, Jieting, Lina Yu, and Hongfeng Yu. "Texture-based edge bundling: A web-based approach for interactively visualizing large graphs." In Big Data (Big Data), 2015 IEEE International Conference on, pp. 2501-2508. IEEE, 2015.
