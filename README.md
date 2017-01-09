@@ -1,7 +1,7 @@
  
 *Johnson Keiriz*
 
-The code in this repo is inspired from https://github.com/upphiminn/d3.ForceBundle
+The code in this repo is inspired from [d3.ForceBundle](https://github.com/upphiminn/d3.ForceBundle)
 ##### Javascript Force Edge Bundling for d3.js
 ![](readme_img/comp.png) 
 ---
@@ -12,7 +12,7 @@ Node-link graphs with many edges and nodes suffer from visual clutter, edge-bund
 **Force edge bundling** **[3]** works by modelling edges between nodes as flexible springs which can attract each other if certain geometrical compatibility criterions are met. 
 The input for the algorithm is a simple node-link diagram of a graph with nodes and edges. In order to change the shape of the basic straight line edges between nodes, the algorithm proceeds by subdividing edges into segments. Attraction *spring* forces are simulated between each pair of consecutive subdivision points on the same graph-edge. Moreover, attraction *electrostatic* forces are computed between subpoints of different edges which are geometrically compatible. The combined force acting on each subdivision point is computed and the points are moved a certain step size in the direction of the force. The force-simulation on these sub-points is repeted a certain amout of iterations. After the end of a cycle of iterations the resulting graph-edges are divided again in smaller segements and the whole process repeats itself until the end cycle is reached. It's important to note that the position of original node-points are fixed throughout the simulation.
 This repo contains 2 implementations of the FEB algorithm:
-1) A 2X speed-up version of the CPU-based edge bundling implementation found in https://github.com/upphiminn/d3.ForceBundle.
+1) A 2X speed-up version of the CPU-based edge bundling implementation found in [d3.ForceBundle](https://github.com/upphiminn/d3.ForceBundle).
 2) A WebGL-based implementation based on the Jieting Wu et.al. publication [4].
 #### Parameters Tuning
 #####Fixed Parameters 
