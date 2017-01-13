@@ -69,6 +69,7 @@ window.vizit.utility = window.vizit.utility || {};
         var textureFloat;
         var outputTexture;
         var outputDataType;
+        var maxTextureSize;
         //var program;
 
         /**
@@ -309,6 +310,9 @@ window.vizit.utility = window.vizit.utility || {};
          */
         this.makeSizedTexture = function (width, height, format, type, data)
         {
+            if (width > maxTextureSize || height > maxTextureSize) {
+                console.error("Texture dimensions exceeds GPU capabilities. Check max texture size.");
+            }
             // Create the texture
             var texture = gl.createTexture();
             // Bind the texture so the following methods effect this texture.
@@ -638,6 +642,15 @@ window.vizit.utility = window.vizit.utility || {};
             return (req.status == 200) ? req.responseText : null;
         };
 
+        /**
+         * Get maximum texture size
+         *
+         * @returns {*}
+         */
+        this.getMaxTextureSize = function () {
+            return maxTextureSize;
+        } ;
+
         canvasHeight  = height_;
         problemHeight = canvasHeight;
         canvasWidth   = width_;
@@ -647,6 +660,9 @@ window.vizit.utility = window.vizit.utility || {};
         gl            = this.getGLContext();
         // Attempt to activate the extension, returns null if unavailable
         textureFloat  = gl.getExtension('OES_texture_float');
+        // Get max texture size: we can make a maxTextureSize X maxTextureSize texture if we have enough memory
+        // it is up to the user to compute if the problem fits in the GPU memory
+        maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
     };
 
     // Disable attributes unused in computations.
