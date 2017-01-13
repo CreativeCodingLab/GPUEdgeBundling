@@ -10,6 +10,8 @@
             edges = [], // [{'source':'nodeid1', 'target':'nodeid2'},..]
             nEdges, // number of edges
             nPoints, // number of points per edge after the end of the algorithm
+            nRows, nColumns, // number of rows and columns of the problem
+            maxTextureSize, // max texture size of the GPU used
             K = 0.1, // global bundling constant controlling edge stiffness
             S_initial = 0.1, // init. distance to move points
             S = S_initial,
@@ -35,10 +37,14 @@
 
         // get uniform locations from the shader program
         function storeUniformsLocation() {
+            shaderUniforms["nEdgesSubdivision"] = gpgpuUility.getUniformLocation(programSubdivision, "nEdges");
+            shaderUniforms["nPointsSubdivision"] = gpgpuUility.getUniformLocation(programSubdivision, "nPoints");
             shaderUniforms["PSubdivision"] = gpgpuUility.getUniformLocation(programSubdivision, "P");
             shaderUniforms["oldP"] = gpgpuUility.getUniformLocation(programSubdivision, "oldP");
             shaderUniforms["edgesSubdivision"] = gpgpuUility.getUniformLocation(programSubdivision, "edges");
 
+            shaderUniforms["nEdgesUpdate"] = gpgpuUility.getUniformLocation(programUpdate, "nEdges");
+            shaderUniforms["nPointsUpdate"] = gpgpuUility.getUniformLocation(programUpdate, "nPoints");
             shaderUniforms["PUpdate"] = gpgpuUility.getUniformLocation(programUpdate, "P");
             shaderUniforms["K"] = gpgpuUility.getUniformLocation(programUpdate, "K");
             shaderUniforms["S"] = gpgpuUility.getUniformLocation(programUpdate, "S");
@@ -47,11 +53,15 @@
         }
 
         function setUniformsSubdivision() {
+            gl.uniform1i(shaderUniforms["nEdgesSubdivision"], nEdges);
+            gl.uniform1i(shaderUniforms["nPointsSubdivision"], nPoints);
             gl.uniform1i(shaderUniforms["PSubdivision"], P);
             gl.uniform1f(shaderUniforms["oldP"], oldP);
         }
 
         function setUniformsUpdate() {
+            gl.uniform1i(shaderUniforms["nEdgesUpdate"], nEdges);
+            gl.uniform1i(shaderUniforms["nPointsUpdate"], nPoints);
             gl.uniform1i(shaderUniforms["PUpdate"], P);
             gl.uniform1f(shaderUniforms["K"], K);
             gl.uniform1f(shaderUniforms["S"], S);
@@ -82,28 +92,49 @@
         }
 
         function initializeWebGL() {
-            gpgpuUility = new vizit.utility.GPGPUtility(nPoints, nEdges, false, {premultipliedAlpha:false});
+            // analyze the required memory, if the number of edges surpasses the max texture size, tiling is performed
+            gpgpuUility = new vizit.utility.GPGPUtility(1, 1, false, {premultipliedAlpha:false});
+            maxTextureSize = gpgpuUility.getMaxTextureSize();
+            delete gpgpuUility;
+            var nTiles = Math.ceil(nEdges/maxTextureSize);
+            if (nTiles > 1)
+                console.log("Using " + nTiles + " tiles.");
+            nRows = Math.min(nEdges, maxTextureSize);
+            nColumns = nPoints*nTiles;
+            if (nColumns > maxTextureSize) {
+                console.error("Problem too large on GPU capabilities!");
+            }
+
+            gpgpuUility = new vizit.utility.GPGPUtility(nColumns, nRows, false, {premultipliedAlpha:false});
             gl = gpgpuUility.getGLContext();
+            var canvas = gpgpuUility.getCanvas();
+            canvas.addEventListener("webglcontextlost", function(event) {
+                event.preventDefault();
+            }, false);
         }
 
         function initTexture() {
-            //console.log('Creating texture of size (W X H): ' + nPoints + 'X' + nEdges);
+            console.log('Creating textures of size (W X H): ' + nColumns + 'X' + nRows);
             // prepare nodes
-            var pixels = create2DArray(nEdges,nPoints,4);
+            var pixels = create2DArray(nRows,nColumns,4);
+            var offset, rr;
             for (var r = 0; r < nEdges; r++) {
-                // first column
-                pixels.setTo(r,0,0,nodes[edges[r].source].x);
-                pixels.setTo(r,0,1,nodes[edges[r].source].y);
-                //pixels.setTo(r,0,2,nodes[edges[r].source].z);
+                rr = r % nRows;
+                offset = Math.floor(r/nRows)*nPoints;
+                // first column: 0 + offset
+                pixels.setTo(rr,offset,0,nodes[edges[r].source].x);
+                pixels.setTo(rr,offset,1,nodes[edges[r].source].y);
+                //pixels.setTo(rr,offset,2,nodes[edges[r].source].z);
 
-                // second column
-                pixels.setTo(r,1,0,nodes[edges[r].target].x);
-                pixels.setTo(r,1,1,nodes[edges[r].target].y);
-                //pixels.setTo(r,1,2,nodes[edges[r].target].z);
+                // second column: 1 + offset
+                pixels.setTo(rr,1+offset,0,nodes[edges[r].target].x);
+                pixels.setTo(rr,1+offset,1,nodes[edges[r].target].y);
+                //pixels.setTo(rr,1+offset,2,nodes[edges[r].target].z);
             }
 
-            textures[writeTex]  = gpgpuUility.makeSizedTexture(nPoints, nEdges, gl.RGBA, gl.FLOAT, null); // target
-            textures[readTex]   = gpgpuUility.makeSizedTexture(nPoints, nEdges, gl.RGBA, gl.FLOAT, pixels); // source
+            // console.log(pixels);
+            textures[writeTex]  = gpgpuUility.makeSizedTexture(nColumns, nRows, gl.RGBA, gl.FLOAT, null); // target
+            textures[readTex]   = gpgpuUility.makeSizedTexture(nColumns, nRows, gl.RGBA, gl.FLOAT, pixels); // source
         }
 
         function deleteTexture() {
@@ -177,18 +208,23 @@
             gpgpuUility.deleteProgram(programSubdivision);
             gpgpuUility.deleteProgram(programUpdate);
             // get the output, note that it is now in readTex since we do swap after each iteration
-            var data = gpgpuUility.downloadTexture(textures[readTex], nPoints, nEdges, gl.FLOAT, false);
-            //console.log(data);
+            var data = gpgpuUility.downloadTexture(textures[readTex], nColumns, nRows, gl.FLOAT, false);
+            // console.log(data);
             deleteTexture();
+
+            var offset, rr;
 
             var subdivision_points = [];
             for (var i = 0; i < nEdges; i++) {
                 var edge = [];
+                rr = i % nRows;
+                offset = Math.floor(i/nRows)*nPoints;
                 for (var j = 0; j < nPoints; j++) {
-                    edge.push(new THREE.Vector3(data.get(i,j,0),data.get(i,j,1),data.get(i,j,2)));
+                    edge.push(new THREE.Vector3(data.get(rr,j+offset,0),data.get(rr,j+offset,1),data.get(rr,j+offset,2)));
                 }
                 subdivision_points.push(edge);
             }
+            // console.log(subdivision_points);
 
             return subdivision_points;
         };

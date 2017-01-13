@@ -4,6 +4,9 @@ precision highp int;
 uniform int height; // problem height
 uniform int width; // problem width
 
+uniform int nEdges;
+uniform int nPoints;
+
 uniform int P; // number of points per edge excluding terminal points
 uniform float K;
 uniform float S;
@@ -18,7 +21,8 @@ float W, H; // width and height = nPoints and nEdges
 int c; // the point = which column
 float r; // the edge row in texture coordinate
 
-float cEnd; // the end point of the edge (P+1) in texture coordinate, should be the same for all edges
+int cOffset; // column offset in case of tiling
+float c0, cEnd; // the end points of the edge at 0 and (P+1) in texture coordinate, should be the same for all edges
 
 int edge; // the edge id = which row
 
@@ -30,8 +34,8 @@ float eps = 1e-6;
 
 vec3 applySpringForce() {
     float kP = K/(edgeLength*float(P+1));
-    vec3 prev = texture2D(edges, vec2(float(c-1)/(W-1.), r)).xyz;
-    vec3 next = texture2D(edges, vec2(float(c+1)/(W-1.), r)).xyz;
+    vec3 prev = texture2D(edges, vec2((float(c-1+cOffset))/(W-1.), r)).xyz;
+    vec3 next = texture2D(edges, vec2((float(c+1+cOffset))/(W-1.), r)).xyz;
     return kP*(prev - 2.*crnt + next);
 }
 
@@ -65,11 +69,7 @@ float compatibilityScore(vec3 Q1, vec3 Q2) {
 	return (angleCompatibility * scaleCompatibility * positionCompatibility * visibilityCompatibility(Q1, Q2));
 }
 
-bool isEdgeCompatible(float rr) {
-
-    vec3 Q1 = texture2D(edges, vec2(0., rr)).xyz;
-    vec3 Q2 = texture2D(edges, vec2(cEnd, rr)).xyz;
-
+bool isEdgeCompatible(vec3 Q1, vec3 Q2) {
     return compatibilityScore(Q1, Q2) >= threshold;
 }
 
@@ -77,19 +77,28 @@ vec3 applyElectrostaticForce() {
     vec3 forces = vec3(0.);
     vec3 force;
     float rr;
+    int tileNumber = 0, offset = 0;
+    vec3 Q1, Q2;
 
     for (int i = 0; i < 100000; i++) {
         if (i == edge) {
             continue;
         }
-        rr = float(i)/(H-1.); // target edge in texture coordinate = row
-        if (isEdgeCompatible(rr)) {
-            force = texture2D(edges, vec2(vTextureCoord.s, rr)).xyz - crnt;
+        // get row of test edge
+        tileNumber = i/height;
+        rr = float(i - tileNumber*height)/(H-1.); // target edge in texture coordinate = row
+        // get test edge end points
+        offset = tileNumber*nPoints;
+        Q1 = texture2D(edges, vec2(float(offset)/(W-1.), rr)).xyz;
+        Q2 = texture2D(edges, vec2(float(P+1+offset)/(W-1.), rr)).xyz;
+
+        if (isEdgeCompatible(Q1, Q2)) {
+            force = texture2D(edges, vec2( float(c+offset)/(W-1.), rr)).xyz - crnt;
             if (abs(force.x) > eps || abs(force.y) > eps || abs(force.z) > eps) {
                 forces += normalize(force);
             }
         }
-        if (i >= height-1) {
+        if (i >= nEdges-1) {
             break;
         }
     }
@@ -103,18 +112,25 @@ void main() {
     H = float(height);
 
     c = int(floor(vTextureCoord.s * W)); // column = point
-    r = vTextureCoord.t; // row = edge
-    edge = int(floor(r * H));
+    int tileNumber = c/nPoints; // 0, 1, 2 ...
+    cOffset = tileNumber*nPoints;
+    c -= cOffset; // remove the offset caused by tiling
+
+    r = vTextureCoord.t; // row
+    edge = tileNumber*height + int(floor(r*H)); // which edge
 
     crnt = texture2D(edges, vTextureCoord).xyz;
     vec3 outP = crnt; // output point
 
+    bool isInScope = (edge < nEdges);
     bool isEndPoint = (c == 0) || (c == P+1);
 
-    if (!isEndPoint) {
+    if (!isEndPoint && isInScope) {
 
-        cEnd = float(P+1)/(W-1.);
-        P1 = texture2D(edges, vec2(0., r)).xyz;
+        c0 = float(cOffset)/(W-1.);
+        cEnd = float(P+1+cOffset)/(W-1.);
+        // the end points
+        P1 = texture2D(edges, vec2(c0, r)).xyz;
         P2 = texture2D(edges, vec2(cEnd, r)).xyz;
         edgeLength = distance(P1, P2);
 
