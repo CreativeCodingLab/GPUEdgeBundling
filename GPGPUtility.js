@@ -61,12 +61,13 @@ window.vizit.utility = window.vizit.utility || {};
         var canvas;
         /** @member {WebGLRenderingContext} gl The WebGL context associated with the canvas. */
         var gl;
-        var canvasHeight, canvasWidth;
+        //var canvasHeight, canvasWidth;
         var problemHeight, problemWidth;
         var standardVertexShader;
         var standardVertices;
         /** @member {Object} Non null if we enable OES_texture_float. */
         var textureFloat;
+        var depthExtension;
         var outputTexture;
         var outputDataType;
         var maxTextureSize;
@@ -182,6 +183,17 @@ window.vizit.utility = window.vizit.utility || {};
         };
 
         /**
+         * The object returned from getExtension, which contains any constants or functions
+         * provided by the extension. Or null if the extension is unavailable.
+         *
+         * @returns {Object} The object returned from gl.getExtension('WEBGL_depth_texture')
+         */
+        this.getDepthExtension = function ()
+        {
+            return depthExtension;
+        };
+
+        /**
          * Set a height and width for the simulation steps when they are different than
          * the canvas height and width.
          *
@@ -192,9 +204,14 @@ window.vizit.utility = window.vizit.utility || {};
         {
             problemHeight = height;
             problemWidth  = width;
+
+            canvas.width  = problemWidth;
+            canvas.height = problemHeight;
+
+            gl.viewport(0, 0, problemWidth, problemHeight);
         };
 
-        this.getComputeContext = function ()
+        /*this.getComputeContext = function ()
         {
             if (problemWidth != canvasWidth || problemHeight != canvasHeight)
             {
@@ -210,7 +227,7 @@ window.vizit.utility = window.vizit.utility || {};
                 gl.viewport(0, 0, canvasWidth, canvasHeight);
             }
             return gl;
-        };
+        };*/
 
         /**
          * Refresh the data in a preexisting texture using texSubImage2D() to avoiding repeated allocation of texture memory.
@@ -651,15 +668,16 @@ window.vizit.utility = window.vizit.utility || {};
             return maxTextureSize;
         } ;
 
-        canvasHeight  = height_;
-        problemHeight = canvasHeight;
-        canvasWidth   = width_;
-        problemWidth  = canvasWidth;
+        //canvasHeight  = height_;
+        problemHeight = height_;
+        //canvasWidth   = width_;
+        problemWidth  = width_;
         attributes    = typeof attributes_ === 'undefined' ? ns.GPGPUtility.STANDARD_CONTEXT_ATTRIBUTES : attributes_;
-        canvas        = this.makeGPCanvas(canvasWidth, canvasHeight, showCanvas);
+        canvas        = this.makeGPCanvas(problemWidth, problemHeight, showCanvas);
         gl            = this.getGLContext();
         // Attempt to activate the extension, returns null if unavailable
         textureFloat  = gl.getExtension('OES_texture_float');
+        depthExtension = gl.getExtension("WEBGL_depth_texture");
         // Get max texture size: we can make a maxTextureSize X maxTextureSize texture if we have enough memory
         // it is up to the user to compute if the problem fits in the GPU memory
         maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
