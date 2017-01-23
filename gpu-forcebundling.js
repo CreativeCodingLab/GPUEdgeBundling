@@ -263,6 +263,7 @@
             gl.finish();
             console.timeEnd("GPU Time taken ");
 
+            gpgpuUility.deleteProgram(programCompatibility);
             gpgpuUility.deleteProgram(programSubdivision);
             gpgpuUility.deleteProgram(programUpdate);
 
