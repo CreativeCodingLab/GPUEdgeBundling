@@ -63,16 +63,16 @@
                 }
 
                 //Run the FDEB algorithm using default values on the data
-                var fbundling = d3.ForceEdgeBundling().nodes(nnodes).edges(eedges);
-                var timeStart, timeEnd;
-                timeStart = Date.now();
+                var fbundling = d3.ForceEdgeBundling().nodes(nnodes).edges(eedges).cycles(6).iterations(90);
+                console.time("CPU EB ");
                 //var results = fbundling();
-                timeEnd = Date.now();
-                console.log("CPU Time taken = ", timeEnd-timeStart);
+                console.timeEnd("CPU EB ");
 
-                // try webgl stuff
-                var gpfBundling = d3.GPUForceEdgeBundling().nodes(nnodes).edges(eedges);
+                // try webgl version
+                var gpfBundling = d3.GPUForceEdgeBundling().nodes(nnodes).edges(eedges).cycles(5).iterations(60);
+                console.time("GPU EB ");
                 var results = gpfBundling();
+                console.timeEnd("GPU EB ");
 
                 var svg = d3.select("#svg").append("svg")
                     .attr("width", 1200)

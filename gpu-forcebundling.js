@@ -10,8 +10,6 @@
             edges = [], // [{'source':'nodeid1', 'target':'nodeid2'},..]
             nEdges, // number of edges
             nPoints, // number of points per edge after the end of the algorithm
-            nRows, nColumns, // number of rows and columns of the problem
-            maxTextureSize, // max texture size of the GPU used
             K = 0.1, // global bundling constant controlling edge stiffness
             S_initial = 0.1, // init. distance to move points
             S = S_initial,
@@ -23,20 +21,33 @@
             I_initial = 90, // 90, init. number of iterations for cycle
             I = I_initial,
             I_rate = 0.6666667, // rate at which iteration number decreases i.e. 2/3
+            compatibility_list = [],
             compatibility_threshold = 0.6;
 
         // WebGL stuff
         var gpgpuUility = null,
             gl = null, // gl context
+            programCompatibility = null, // openGL compatibility program
             programSubdivision = null, // opengGL subdivision program
             programUpdate = null, // opengGL update program
             textures = [], // matrices to store the bundled edges, review Algorithm section in the paper
             shaderUniforms = [],
-            writeTex = 0, readTex = 1,
-            frameBuffer = null;
+            writeTex = 0, readTex = 1, comTex = 2,
+            compatibilityTexture3 = null,
+            compatibilityTexture = null,
+            frameBuffer = null,
+            maxNCompatibleEdges = 500,
+            nRows, nColumns, // number of rows and columns of the problem
+            maxTextureSize, // max texture size of the GPU used
+            nTiles = 1; // number of tiles in case nEdges > maxTextureSize
 
-        // get uniform locations from the shader program
+            // get uniform locations from the shader program
         function storeUniformsLocation() {
+            shaderUniforms["nEdgesCompatibility"] = gpgpuUility.getUniformLocation(programCompatibility, "nEdges");
+            shaderUniforms["nPointsCompatibility"] = gpgpuUility.getUniformLocation(programCompatibility, "nPoints");
+            shaderUniforms["threshold"] = gpgpuUility.getUniformLocation(programCompatibility, "threshold");
+            shaderUniforms["edgesCompatibility"] = gpgpuUility.getUniformLocation(programCompatibility, "edges");
+
             shaderUniforms["nEdgesSubdivision"] = gpgpuUility.getUniformLocation(programSubdivision, "nEdges");
             shaderUniforms["nPointsSubdivision"] = gpgpuUility.getUniformLocation(programSubdivision, "nPoints");
             shaderUniforms["PSubdivision"] = gpgpuUility.getUniformLocation(programSubdivision, "P");
@@ -48,8 +59,14 @@
             shaderUniforms["PUpdate"] = gpgpuUility.getUniformLocation(programUpdate, "P");
             shaderUniforms["K"] = gpgpuUility.getUniformLocation(programUpdate, "K");
             shaderUniforms["S"] = gpgpuUility.getUniformLocation(programUpdate, "S");
-            shaderUniforms["threshold"] = gpgpuUility.getUniformLocation(programUpdate, "threshold");
             shaderUniforms["edgesUpdate"] = gpgpuUility.getUniformLocation(programUpdate, "edges");
+            shaderUniforms["compatibility"] = gpgpuUility.getUniformLocation(programUpdate, "compatibility");
+        }
+
+        function setUniformsCompatibility() {
+            gl.uniform1i(shaderUniforms["nEdgesCompatibility"], nEdges);
+            gl.uniform1i(shaderUniforms["nPointsCompatibility"], nPoints);
+            gl.uniform1f(shaderUniforms["threshold"], compatibility_threshold);
         }
 
         function setUniformsSubdivision() {
@@ -65,14 +82,17 @@
             gl.uniform1i(shaderUniforms["PUpdate"], P);
             gl.uniform1f(shaderUniforms["K"], K);
             gl.uniform1f(shaderUniforms["S"], S);
-            gl.uniform1f(shaderUniforms["threshold"], compatibility_threshold);
+
+            gl.activeTexture(gl.TEXTURE0 + comTex); // texture unit 2
+            gl.bindTexture(gl.TEXTURE_2D, compatibilityTexture);
+            gl.uniform1i(shaderUniforms["compatibility"], comTex);
         }
 
         function setUniformTexture(programName) {
             gl.bindTexture(gl.TEXTURE_2D, null);
             gl.activeTexture(gl.TEXTURE0 + readTex);
             gl.bindTexture(gl.TEXTURE_2D, textures[readTex]);
-            gl.uniform1i(shaderUniforms["edges"+programName], readTex); // texture unit 0
+            gl.uniform1i(shaderUniforms["edges"+programName], readTex); // texture unit
         }
 
         function swapTextures() {
@@ -95,8 +115,8 @@
             // analyze the required memory, if the number of edges surpasses the max texture size, tiling is performed
             gpgpuUility = new vizit.utility.GPGPUtility(1, 1, false, {premultipliedAlpha:false});
             maxTextureSize = gpgpuUility.getMaxTextureSize();
-            delete gpgpuUility;
-            var nTiles = Math.ceil(nEdges/maxTextureSize);
+            nTiles = Math.ceil(nEdges/maxTextureSize);
+            console.log("Problem requires " + nTiles + " tiles");
             if (nTiles > 1)
                 console.log("Using " + nTiles + " tiles.");
             nRows = Math.min(nEdges, maxTextureSize);
@@ -105,7 +125,7 @@
                 console.error("Problem too large on GPU capabilities!");
             }
 
-            gpgpuUility = new vizit.utility.GPGPUtility(nColumns, nRows, false, {premultipliedAlpha:false});
+            gpgpuUility.setProblemSize(nColumns, nRows);
             gl = gpgpuUility.getGLContext();
             var canvas = gpgpuUility.getCanvas();
             canvas.addEventListener("webglcontextlost", function(event) {
@@ -118,34 +138,55 @@
             // prepare nodes
             var pixels = create2DArray(nRows,nColumns,4);
             var offset, rr;
-            for (var r = 0; r < nEdges; r++) {
-                rr = r % nRows;
-                offset = Math.floor(r/nRows)*nPoints;
+            for (var e = 0; e < nEdges; e++) {
+                rr = e % nRows;
+                offset = Math.floor(e/nRows)*nPoints;
                 // first column: 0 + offset
-                pixels.setTo(rr,offset,0,nodes[edges[r].source].x);
-                pixels.setTo(rr,offset,1,nodes[edges[r].source].y);
-                //pixels.setTo(rr,offset,2,nodes[edges[r].source].z);
+                pixels.setTo(rr,offset,0,nodes[edges[e].source].x);
+                pixels.setTo(rr,offset,1,nodes[edges[e].source].y);
+                //pixels.setTo(rr,offset,2,nodes[edges[e].source].z);
 
                 // second column: 1 + offset
-                pixels.setTo(rr,1+offset,0,nodes[edges[r].target].x);
-                pixels.setTo(rr,1+offset,1,nodes[edges[r].target].y);
-                //pixels.setTo(rr,1+offset,2,nodes[edges[r].target].z);
+                pixels.setTo(rr,1+offset,0,nodes[edges[e].target].x);
+                pixels.setTo(rr,1+offset,1,nodes[edges[e].target].y);
+                //pixels.setTo(rr,1+offset,2,nodes[edges[e].target].z);
             }
 
             // console.log(pixels);
             textures[writeTex]  = gpgpuUility.makeSizedTexture(nColumns, nRows, gl.RGBA, gl.FLOAT, null); // target
             textures[readTex]   = gpgpuUility.makeSizedTexture(nColumns, nRows, gl.RGBA, gl.FLOAT, pixels); // source
+
+            compatibilityTexture = gpgpuUility.makeSizedTexture(nTiles*maxNCompatibleEdges, nRows, gl.RGBA, gl.FLOAT, null);
         }
+
+        function initCompatibilityTexture() {
+            var pixels = create2DArray(nRows,nTiles*maxNCompatibleEdges,4);
+            pixels.fill(-1.);
+            var offset, row;
+            for (var e = 0; e < nEdges; e++) {
+                row = e % nRows;
+                offset = Math.floor(e/nRows)*maxNCompatibleEdges;
+                for (var c = 0; c < compatibility_list[e].length; c++) {
+                    pixels.setTo(row, c+offset, 0, compatibility_list[e][c]);
+                }
+            }
+            console.log(compatibility_list);
+
+            compatibilityTexture3 = gpgpuUility.makeSizedTexture(nTiles*maxNCompatibleEdges, nRows, gl.RGBA, gl.FLOAT, pixels);
+        }
+
 
         function deleteTexture() {
             gl.deleteTexture(textures[0]);
             gl.deleteTexture(textures[1]);
+            gl.deleteTexture(compatibilityTexture);
         }
 
         function createPrograms() {
             // Note that the preprocessor requires the newlines.
             programSubdivision = gpgpuUility.createProgram(null, gpgpuUility.loadShader('../subdivision.glsl'));
             programUpdate = gpgpuUility.createProgram(null, gpgpuUility.loadShader('../update.glsl'));
+            programCompatibility = gpgpuUility.createProgram(null, gpgpuUility.loadShader('../compatibility.glsl'));
         }
 
         function doBundling() {
@@ -153,6 +194,19 @@
             I = I_initial;
             P = P_initial;
 
+            // prepare edge compatibility list
+            gpgpuUility.setProblemSize(nTiles*maxNCompatibleEdges, nRows);
+            gpgpuUility.useProgram(programCompatibility);
+            setUniformsCompatibility();
+            setUniformTexture("Compatibility");
+            gpgpuUility.attachFrameBuffer(frameBuffer, gl.COLOR_ATTACHMENT0, compatibilityTexture);
+            var bufferStatus = gpgpuUility.frameBufferIsComplete();
+            if(!bufferStatus.isComplete) {
+                console.log(bufferStatus.message);
+            }
+            gpgpuUility.executeProgram(programCompatibility);
+
+            gpgpuUility.setProblemSize(nColumns, nRows);
             for (var Ci = 0; Ci <= C; Ci++) {
 
                 // console.log("Cycle # " + Ci + " , P = " + P);
@@ -160,6 +214,8 @@
                 gpgpuUility.useProgram(programSubdivision);
                 setUniformsSubdivision();
                 setUniformTexture("Subdivision");
+                // The framebuffer when bound, would render all WebGL draw commands given into colorTexture
+                // instead of the WebGL canvas.
                 gpgpuUility.attachFrameBuffer(frameBuffer, gl.COLOR_ATTACHMENT0, textures[writeTex]);
                 /*var bufferStatus = gpgpuUility.frameBufferIsComplete();
                 if(!bufferStatus.isComplete) {
@@ -193,22 +249,26 @@
             nPoints = P_initial*Math.pow(P_rate, C)+2;
             //console.log("Expected output = " + nPoints + " points");
 
-            var timeStart = Date.now();
+            console.time("GPU Preparation Time taken ");
             initializeWebGL();
             frameBuffer = gpgpuUility.createFramebuffer();
             initTexture();
             createPrograms();
             storeUniformsLocation();
-            console.log("GPU Preparation Time taken = ", Date.now()-timeStart);
+            gl.finish();
+            console.timeEnd("GPU Preparation Time taken ");
 
-            timeStart = Date.now();
+            console.time("GPU Time taken ");
             doBundling();
-            console.log("GPU Time taken = ", Date.now()-timeStart);
+            gl.finish();
+            console.timeEnd("GPU Time taken ");
 
             gpgpuUility.deleteProgram(programSubdivision);
             gpgpuUility.deleteProgram(programUpdate);
-            // get the output, note that it is now in readTex since we do swap after each iteration
-            var data = gpgpuUility.downloadTexture(textures[readTex], nColumns, nRows, gl.FLOAT, false);
+
+            gpgpuUility.attachFrameBuffer(frameBuffer, gl.COLOR_ATTACHMENT0, textures[readTex]);
+            var data = gpgpuUility.downloadTexture(textures[readTex], nColumns, nRows, gl.FLOAT, true);
+
             // console.log(data);
             deleteTexture();
 
