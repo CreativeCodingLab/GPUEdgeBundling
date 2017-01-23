@@ -74,12 +74,6 @@
 			}
 		}
 
-		function initialize_compatibility_lists() {
-			for (var i = 0; i < data_edges.length; i++) {
-				compatibility_list_for_edge[i] = []; //0 compatible edges.
-			}
-		}
-
 		function filter_self_loops(edgelist) {
 			var filtered_edge_list = [];
 			for (var e = 0; e < edgelist.length; e++) {
@@ -208,6 +202,9 @@
 		}
 
 		function compute_compatibility_lists() {
+            for (var i = 0; i < data_edges.length; i++) {
+                compatibility_list_for_edge[i] = []; //0 compatible edges.
+            }
 			for (var e = 0; e < data_edges.length - 1; e++) {
 				for (var oe = e + 1; oe < data_edges.length; oe++) { // don't want any duplicates
 					if (are_compatible(data_edges[e], data_edges[oe])) {
@@ -231,21 +228,19 @@
 			initialize_edge_subdivisions();
 			timeEnd = Date.now();
 			console.log("Init 1 = ", timeEnd - timeStart);
-			initialize_compatibility_lists();
-			console.log("Init 2 = ", Date.now() - timeEnd);
 			timeEnd = Date.now();
 			update_edge_divisions(P);
-			console.log("Init 3 = ", Date.now() - timeEnd);
+			console.log("Init 2 = ", Date.now() - timeEnd);
 			timeEnd = Date.now();
 			compute_compatibility_lists();
-			console.log("Init 4 = ", Date.now() - timeEnd);
+			console.log("Init 3 = ", Date.now() - timeEnd);
 			timeEnd = Date.now();
 
 			for (var cycle = 0; cycle < C; cycle++) {
 
-                console.log('C = ' + cycle);
-                console.log('P = ' + P);
-                console.log('S = ' + S);
+                // console.log('C = ' + cycle);
+                // console.log('P = ' + P);
+                // console.log('S = ' + S);
 
 				for (var iteration = 0; iteration < I; iteration++) {
 					var forces = [];
