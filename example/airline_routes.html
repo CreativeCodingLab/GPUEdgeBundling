@@ -135,8 +135,8 @@
                 //console.log('Nodes', nnodes);
                 //console.log('Edges', eedges);
 
-                var new_scale_x = d3.scale.linear().domain([min_x, max_x]).range([1000, 50]);
-                var new_scale_y = d3.scale.linear().domain([min_y, max_y]).range([560, 50]);
+                var new_scale_x = d3.scale.linear().domain([min_x, max_x]).range([1300, 50]);
+                var new_scale_y = d3.scale.linear().domain([min_y, max_y]).range([660, 50]);
                 for (var i = 0; i < raw_nodes.length; i++) {
                     nnodes[i] = new THREE.Vector2(new_scale_x(nnodes[i].x), new_scale_y(nnodes[i].y));
                 }
@@ -173,8 +173,8 @@
 
         prepareSvg = function () {
             svg = d3.select("#svg").append("svg")
-                .attr("width", 1200)
-                .attr("height", 600);
+                .attr("width", 1400)
+                .attr("height", 700);
         };
 
         drawData = function () {
@@ -185,8 +185,8 @@
 
             svg.append('rect').attr({
                 'fill': '#111155',
-                'width': 1200,
-                'height': 600
+                'width': 1400,
+                'height': 700
             });
             svg.attr('transform', 'translate(20, 20)');
 
@@ -196,8 +196,8 @@
                 })
                 .y(function (d) {
                     return d.y;
-                })
-                .interpolate("linear");
+                });
+                //.interpolate("linear");
             //plot the data
             for (i = 0; i < results.length; i++) {
                 svg.append("path").attr("d", d3line(results[i]))
