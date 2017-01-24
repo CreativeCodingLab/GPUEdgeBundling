@@ -116,7 +116,7 @@
             gpgpuUility = new vizit.utility.GPGPUtility(1, 1, false, {premultipliedAlpha:false});
             maxTextureSize = gpgpuUility.getMaxTextureSize();
             nTiles = Math.ceil(nEdges/maxTextureSize);
-            console.log("Problem requires " + nTiles + " tiles");
+            // console.log("Problem requires " + nTiles + " tiles");
             if (nTiles > 1)
                 console.log("Using " + nTiles + " tiles.");
             nRows = Math.min(nEdges, maxTextureSize);
@@ -134,7 +134,7 @@
         }
 
         function initTexture() {
-            console.log('Creating textures of size (W X H): ' + nColumns + 'X' + nRows);
+            // console.log('Creating textures of size (W X H): ' + nColumns + 'X' + nRows);
             // prepare nodes
             var pixels = create2DArray(nRows,nColumns,4);
             var offset, rr;
