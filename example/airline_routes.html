@@ -18,28 +18,107 @@
 </head>
 
 <body>
-    <div id="svg">
-    </div>
+    <div class = "menu" id= "control"></div>
+    <div id="svg"></div>
     <script>
-        $(function () {
+        var eedges = [];
+        var nnodes = [];
+        var fbundling = null;
+        var gpfBundling = null;
+        var results = [];
+        var svg = null;
+
+        addControlSliders = function() {
+            var menu =  d3.select('#control');
+            menu.append("label")
+                .attr("for", "nCyclesSlider")
+                .attr("id", "nCyclesSliderLabel")
+                .text("Number of Cycles (6)");
+
+            menu.append("input")
+                .attr("type", "range")
+                .attr("value", 6)
+                .attr("id", "nCyclesSlider")
+                .attr("min", 0)
+                .attr("max", 6)
+                .attr("step", 1)
+                .on("change", function () {
+                    document.getElementById('nCyclesSliderLabel').innerText = "Number of Cycles (" + this.value +")";
+                    performEB();
+                    drawData();
+                });
+
+            menu.append("label")
+                .attr("for", "nIterationsCyclesSlider")
+                .attr("id", "nIterationsCyclesSliderLabel")
+                .text("Number of Iterations per Cycles (90)");
+
+            menu.append("input")
+                .attr("type", "range")
+                .attr("value", 90)
+                .attr("id", "nIterationsCyclesSlider")
+                .attr("min", 0)
+                .attr("max", 100)
+                .attr("step", 10)
+                .on("change", function () {
+                    document.getElementById('nIterationsCyclesSliderLabel').innerText = "Number of Iterations per Cycles (" + this.value +")";
+                    performEB();
+                    drawData();
+                });
+
+            menu.append("label")
+                .attr("for", "KSlider")
+                .attr("id", "KSliderLabel")
+                .text("Bundling constant (0.1)");
+
+            menu.append("input")
+                .attr("type", "range")
+                .attr("value", 10)
+                .attr("id", "KSlider")
+                .attr("min", 0)
+                .attr("max", 100)
+                .attr("step", 5)
+                .on("change", function () {
+                    document.getElementById('KSliderLabel').innerText = "Bundling constant (" + this.value/100 +")";
+                    performEB();
+                    drawData();
+                });
+
+            menu.append("label")
+                .attr("for", "thresholdSlider")
+                .attr("id", "thresholdSliderLabel")
+                .text("Compatibility Threshold (0.6)");
+
+            menu.append("input")
+                .attr("type", "range")
+                .attr("value", 6)
+                .attr("id", "thresholdSlider")
+                .attr("min", 1)
+                .attr("max", 10)
+                .attr("step", 1)
+                .on("change", function () {
+                    document.getElementById('thresholdSliderLabel').innerText = "Compatibility Threshold (" + this.value/10 +")";
+                    performEB();
+                    drawData();
+                });
+        };
+
+        loadData = function () {
             d3.xml("bundling_data/airlines.xml", function (xml) {
                 //Transform the XML data into a proper format used by the algorithm
                 var raw_edges = xml.documentElement.getElementsByTagName("edge");
                 var raw_nodes = xml.documentElement.getElementsByTagName("node");
-                var eedges = [];
-                var nnodes = [];
                 var min_x = Number.MAX_VALUE;
                 var max_x = 0;
                 var min_y = Number.MAX_VALUE;
                 var max_y = 0;
-
                 for (var i = 0; i < raw_nodes.length; i++) {
                     var key = raw_nodes[i].getAttribute('id');
                     var x = Math.abs(parseFloat(raw_nodes[i].childNodes[1].firstChild.nodeValue));
 //                    var name = raw_nodes[i].childNodes[3].firstChild.nodeValue;
                     var y = Math.abs(parseFloat(raw_nodes[i].childNodes[5].firstChild.nodeValue));
 
-                    nnodes[key] = new THREE.Vector2(x,y);
+                    nnodes[key] = new THREE.Vector2(x, y);
                     min_x = Math.min(min_x, x);
                     max_x = Math.max(max_x, x);
                     min_y = Math.min(min_y, y);
@@ -61,68 +140,94 @@
                 for (var i = 0; i < raw_nodes.length; i++) {
                     nnodes[i] = new THREE.Vector2(new_scale_x(nnodes[i].x), new_scale_y(nnodes[i].y));
                 }
+                console.log("Data loaded");
 
-                //Run the FDEB algorithm using default values on the data
-                var fbundling = d3.ForceEdgeBundling().nodes(nnodes).edges(eedges).cycles(6).iterations(90);
-                console.time("CPU EB ");
-                //var results = fbundling();
-                console.timeEnd("CPU EB ");
-
-                // try webgl version
-                var gpfBundling = d3.GPUForceEdgeBundling().nodes(nnodes).edges(eedges).cycles(5).iterations(60);
-                console.time("GPU EB ");
-                var results = gpfBundling();
-                console.timeEnd("GPU EB ");
-
-                var svg = d3.select("#svg").append("svg")
-                    .attr("width", 1200)
-                    .attr("height", 600);
-
-                svg = svg.append('g');
-                svg.append('rect').attr({
-                    'fill': '#111155',
-                    'width': 1200,
-                    'height': 600
-                });
-                svg.attr('transform', 'translate(20, 20)');
-
-
-                var d3line = d3.svg.line()
-                    .x(function (d) {
-                        return d.x;
-                    })
-                    .y(function (d) {
-                        return d.y;
-                    })
-                    .interpolate("linear");
-                //plot the data
-                for (i = 0; i < results.length; i++) {
-                    svg.append("path").attr("d", d3line(results[i]))
-                        .style("stroke-width", 1)
-                        .style("stroke", "#ff2222")
-                        .style("fill", "none")
-                        .style('stroke-opacity', 0.115);
-                }
-
-                //draw nodes
-                svg.selectAll('.node')
-                    .data(d3.entries(nnodes))
-                    .enter()
-                    .append('circle')
-                    .classed('node', true)
-                    .attr({
-                        'r': 2,
-                        'fill': '#ffee00'
-                    })
-                    .attr('cx', function (d) {
-                        return d.value.x;
-                    })
-                    .attr('cy', function (d) {
-                        return d.value.y;
-                    });
-
-
+                performEB();
+                prepareSvg();
+                console.time("Drawing ");
+                drawData();
+                console.timeEnd("Drawing ");
             });
+        };
+
+        performEB = function () {
+            console.log("Processing ... ");
+            var nCycles = parseInt(document.getElementById('nCyclesSlider').value);
+            var nIterations = parseInt(document.getElementById('nIterationsCyclesSlider').value);
+            var K = parseFloat(document.getElementById('KSlider').value)/100;
+            var t = parseFloat(document.getElementById('thresholdSlider').value)/10;
+            //Run the FDEB algorithm using default values on the data
+            fbundling = d3.ForceEdgeBundling().nodes(nnodes).edges(eedges).cycles(nCycles).
+            iterations(nIterations).bundling_stiffness(K).compatibility_threshold(t);
+            console.time("CPU EB ");
+            //var results = fbundling();
+            console.timeEnd("CPU EB ");
+
+            // try webgl version
+            gpfBundling = d3.GPUForceEdgeBundling().nodes(nnodes).edges(eedges).cycles(nCycles).
+            iterations(nIterations).bundling_stiffness(K).compatibility_threshold(t);
+            console.time("GPU EB ");
+            results = gpfBundling();
+            console.timeEnd("GPU EB ");
+        };
+
+        prepareSvg = function () {
+            svg = d3.select("#svg").append("svg")
+                .attr("width", 1200)
+                .attr("height", 600);
+        };
+
+        drawData = function () {
+
+            while (svg[0][0].lastChild) {
+                svg[0][0].removeChild(svg[0][0].lastChild);
+            }
+
+            svg.append('rect').attr({
+                'fill': '#111155',
+                'width': 1200,
+                'height': 600
+            });
+            svg.attr('transform', 'translate(20, 20)');
+
+            var d3line = d3.svg.line()
+                .x(function (d) {
+                    return d.x;
+                })
+                .y(function (d) {
+                    return d.y;
+                })
+                .interpolate("linear");
+            //plot the data
+            for (i = 0; i < results.length; i++) {
+                svg.append("path").attr("d", d3line(results[i]))
+                    .style("stroke-width", 1)
+                    .style("stroke", "#ff2222")
+                    .style("fill", "none")
+                    .style('stroke-opacity', 0.125);
+            }
+
+            //draw nodes
+            svg.selectAll('.node')
+                .data(d3.entries(nnodes))
+                .enter()
+                .append('circle')
+                .classed('node', true)
+                .attr({
+                    'r': 2,
+                    'fill': '#ffee00'
+                })
+                .attr('cx', function (d) {
+                    return d.value.x;
+                })
+                .attr('cy', function (d) {
+                    return d.value.y;
+                });
+        };
+
+        $(function () {
+            addControlSliders();
+            loadData();
         })
     </script>
 </body>
