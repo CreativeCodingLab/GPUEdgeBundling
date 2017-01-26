@@ -27,6 +27,7 @@
         var gpfBundling = null;
         var results = [];
         var svg = null;
+        var time = 0;
 
         addControlSliders = function() {
             var menu =  d3.select('#control');
@@ -104,7 +105,7 @@
         };
 
         loadData = function () {
-            d3.xml("bundling_data/airlines.xml", function (xml) {
+            d3.xml("bundling_data/migrations.xml", function (xml) {
                 //Transform the XML data into a proper format used by the algorithm
                 var raw_edges = xml.documentElement.getElementsByTagName("edge");
                 var raw_nodes = xml.documentElement.getElementsByTagName("node");
@@ -138,10 +139,9 @@
                 var new_scale_x = d3.scale.linear().domain([min_x, max_x]).range([1300, 50]);
                 var new_scale_y = d3.scale.linear().domain([min_y, max_y]).range([660, 50]);
                 for (var i = 0; i < raw_nodes.length; i++) {
-                    nnodes[i] = new THREE.Vector2(new_scale_x(nnodes[i].x), new_scale_y(nnodes[i].y));
+                    nnodes[i] = new THREE.Vector3(new_scale_x(nnodes[i].x), new_scale_y(nnodes[i].y,0));
                 }
                 console.log("Data loaded");
-
                 performEB();
                 prepareSvg();
                 console.time("Drawing ");
@@ -160,7 +160,7 @@
             fbundling = d3.ForceEdgeBundling().nodes(nnodes).edges(eedges).cycles(nCycles).
             iterations(nIterations).bundling_stiffness(K).compatibility_threshold(t);
             console.time("CPU EB ");
-            //var results = fbundling();
+//            results = fbundling();
             console.timeEnd("CPU EB ");
 
             // try webgl version
@@ -169,6 +169,7 @@
             console.time("GPU EB ");
             results = gpfBundling();
             console.timeEnd("GPU EB ");
+            time += gpfBundling.processing_time();
         };
 
         prepareSvg = function () {
