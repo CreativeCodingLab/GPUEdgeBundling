@@ -105,7 +105,7 @@
         };
 
         loadData = function () {
-            d3.xml("bundling_data/migrations.xml", function (xml) {
+            d3.xml("bundling_data/airlines.xml", function (xml) {
                 //Transform the XML data into a proper format used by the algorithm
                 var raw_edges = xml.documentElement.getElementsByTagName("edge");
                 var raw_nodes = xml.documentElement.getElementsByTagName("node");
@@ -119,7 +119,7 @@
 //                    var name = raw_nodes[i].childNodes[3].firstChild.nodeValue;
                     var y = Math.abs(parseFloat(raw_nodes[i].childNodes[5].firstChild.nodeValue));
 
-                    nnodes[key] = new THREE.Vector2(x, y);
+                    nnodes[key] = new THREE.Vector3(x, y, 0.);
                     min_x = Math.min(min_x, x);
                     max_x = Math.max(max_x, x);
                     min_y = Math.min(min_y, y);
@@ -160,7 +160,7 @@
             fbundling = d3.ForceEdgeBundling().nodes(nnodes).edges(eedges).cycles(nCycles).
             iterations(nIterations).bundling_stiffness(K).compatibility_threshold(t);
             console.time("CPU EB ");
-//            results = fbundling();
+            results = fbundling();
             console.timeEnd("CPU EB ");
 
             // try webgl version

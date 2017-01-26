@@ -97,7 +97,7 @@
 		}
 
 		function apply_electrostatic_force(e_idx, i) {
-			var sum_of_forces = new THREE.Vector2(0,0);
+			var sum_of_forces = new THREE.Vector3(0,0,0);
 			var compatible_edges_list = compatibility_list_for_edge[e_idx];
 
 			for (var oe = 0; oe < compatible_edges_list.length; oe++) {
@@ -119,14 +119,14 @@
 		function apply_resulting_forces_on_subdivision_points(e_idx, P, S) {
 			var kP = K / (edge_length(data_edges[e_idx]) * (P + 1)); // kP=K/|P|(number of segments), where |P| is the initial length of edge P.
 			// (length * (num of sub division pts - 1))
-			var resulting_forces_for_subdivision_points = [new THREE.Vector2(0,0)];
+			var resulting_forces_for_subdivision_points = [new THREE.Vector3(0,0,0)];
 			for (var i = 1; i < P + 1; i++) { // exclude initial end points of the edge 0 and P+1
 				var spring_force = apply_spring_force(e_idx, i, kP);
 				var electrostatic_force = apply_electrostatic_force(e_idx, i);
 				var resulting_force = spring_force.add(electrostatic_force).multiplyScalar(S);
 				resulting_forces_for_subdivision_points.push(resulting_force);
 			}
-			resulting_forces_for_subdivision_points.push(new THREE.Vector2(0,0));
+			resulting_forces_for_subdivision_points.push(new THREE.Vector3(0,0,0));
 			return resulting_forces_for_subdivision_points;
 		}
 
