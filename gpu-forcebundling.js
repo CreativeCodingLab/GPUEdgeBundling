@@ -32,7 +32,6 @@
             textures = [], // matrices to store the bundled edges, review Algorithm section in the paper
             shaderUniforms = [],
             writeTex = 0, readTex = 1, comTex = 2,
-            compatibilityTexture3 = null,
             compatibilityTexture = null,
             frameBuffer = null,
             maxNCompatibleEdges = 500,
