@@ -21,7 +21,6 @@
             I_initial = 90, // 90, init. number of iterations for cycle
             I = I_initial,
             I_rate = 0.6666667, // rate at which iteration number decreases i.e. 2/3
-            compatibility_list = [],
             compatibility_threshold = 0.6;
 
         // WebGL stuff
@@ -39,7 +38,8 @@
             maxNCompatibleEdges = 500,
             nRows, nColumns, // number of rows and columns of the problem
             maxTextureSize, // max texture size of the GPU used
-            nTiles = 1; // number of tiles in case nEdges > maxTextureSize
+            nTiles = 1, // number of tiles in case nEdges > maxTextureSize
+            time = 0;
 
             // get uniform locations from the shader program
         function storeUniformsLocation() {
@@ -144,12 +144,12 @@
                 // first column: 0 + offset
                 pixels.setTo(rr,offset,0,nodes[edges[e].source].x);
                 pixels.setTo(rr,offset,1,nodes[edges[e].source].y);
-                //pixels.setTo(rr,offset,2,nodes[edges[e].source].z);
+                pixels.setTo(rr,offset,2,nodes[edges[e].source].z);
 
                 // second column: 1 + offset
                 pixels.setTo(rr,1+offset,0,nodes[edges[e].target].x);
                 pixels.setTo(rr,1+offset,1,nodes[edges[e].target].y);
-                //pixels.setTo(rr,1+offset,2,nodes[edges[e].target].z);
+                pixels.setTo(rr,1+offset,2,nodes[edges[e].target].z);
             }
 
             // console.log(pixels);
@@ -158,23 +158,6 @@
 
             compatibilityTexture = gpgpuUility.makeSizedTexture(nTiles*maxNCompatibleEdges, nRows, gl.RGBA, gl.FLOAT, null);
         }
-
-        function initCompatibilityTexture() {
-            var pixels = create2DArray(nRows,nTiles*maxNCompatibleEdges,4);
-            pixels.fill(-1.);
-            var offset, row;
-            for (var e = 0; e < nEdges; e++) {
-                row = e % nRows;
-                offset = Math.floor(e/nRows)*maxNCompatibleEdges;
-                for (var c = 0; c < compatibility_list[e].length; c++) {
-                    pixels.setTo(row, c+offset, 0, compatibility_list[e][c]);
-                }
-            }
-            console.log(compatibility_list);
-
-            compatibilityTexture3 = gpgpuUility.makeSizedTexture(nTiles*maxNCompatibleEdges, nRows, gl.RGBA, gl.FLOAT, pixels);
-        }
-
 
         function deleteTexture() {
             gl.deleteTexture(textures[0]);
@@ -258,10 +241,12 @@
             gl.finish();
             console.timeEnd("GPU Preparation Time taken ");
 
+            var start = Date.now();
             console.time("GPU Time taken ");
             doBundling();
             gl.finish();
             console.timeEnd("GPU Time taken ");
+            time = Date.now() - start;
 
             gpgpuUility.deleteProgram(programCompatibility);
             gpgpuUility.deleteProgram(programSubdivision);
@@ -393,6 +378,10 @@
             }
 
             return forcebundle;
+        };
+
+        forcebundle.processing_time = function () {
+            return time;
         };
 
         /*** ************************ ***/
