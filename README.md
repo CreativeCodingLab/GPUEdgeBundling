@@ -147,6 +147,7 @@ Plotting can be done by using standard *d3* methods i.e. drawing lines between e
 ```        
 ##Example
 see source code in **example/airline_routes.html**.
+see source code in **example/connectome.html**.
 ##### Node-Link
 ![](readme_img/airline_node_link_graph.png) 
 ##### After FDEB 
