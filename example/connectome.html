@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<style>
+    #canvas {
+        width: 1400px;
+        height: 700px;
+        z-index: 1;
+    }
+</style>
+<head>
+    <meta charset="utf-8">
+    <title>FDEB Brain Example</title>
+
+    <!--<script src="http://d3js.org/d3.v3.min.js" charset="utf-8"></script>-->
+    <script type="text/javascript" src="../d3.js"></script>
+    <script type="text/javascript" src="papaparse.js"></script>
+    <script type="text/javascript" src="../three.min.js"></script>
+    <script type="text/javascript" src="TrackballControls.js"></script>
+
+    <script type="text/javascript" src="../d3-ForceEdgeBundling.js"></script>
+    <script type="text/javascript" src="../gpu-forcebundling.js"></script>
+
+    <script type="text/javascript" src="../arrayUtilities.js"></script>
+    <script type="text/javascript" src="../GPGPUtility.js"></script>
+    <script type="text/javascript" src="../jquery-3.1.1.min.js"></script>
+</head>
+
+<body>
+    <div class = "menu" id= "control"></div>
+    <div id = "canvas"></div>
+    <script>
+        var eedges = [];
+        var nnodes = [];
+        var gpfBundling = null;
+        var results = [];
+        var time = 0;
+        var nw = [];
+        var locations = []; /// xyz locations of each node
+        var shpereRadius = 2;
+        var sphereResolution = 16;
+        var dimensionFactor = 1;
+        var scene, canvas, renderer, camera, controls, glyphs = [], edges = [];
+        var colorMap = {
+            'Frontal' : '#2ca02c',
+            'Parietal': '#9467bd',
+            'Occipital':'#d62728',
+            'Temporal': '#ff7f0e',
+            'brainstem' : '#12157f',
+            'Cerebellum' : '#b9bd1a',
+            'Subcortical':'#e377c2'
+        };
+
+        addControlSliders = function () {
+            var menu =  d3.select('#control');
+            menu.append("label")
+                .attr("for", "nCyclesSlider")
+                .attr("id", "nCyclesSliderLabel")
+                .text("Number of Cycles (6)");
+
+            menu.append("input")
+                .attr("type", "range")
+                .attr("value", 6)
+                .attr("id", "nCyclesSlider")
+                .attr("min", 0)
+                .attr("max", 6)
+                .attr("step", 1)
+                .on("change", function () {
+                    document.getElementById('nCyclesSliderLabel').innerText = "Number of Cycles (" + this.value +")";
+                    performEB();
+                    drawEdges();
+                });
+
+            menu.append("label")
+                .attr("for", "nIterationsCyclesSlider")
+                .attr("id", "nIterationsCyclesSliderLabel")
+                .text("Number of Iterations per Cycles (90)");
+
+            menu.append("input")
+                .attr("type", "range")
+                .attr("value", 90)
+                .attr("id", "nIterationsCyclesSlider")
+                .attr("min", 0)
+                .attr("max", 100)
+                .attr("step", 10)
+                .on("change", function () {
+                    document.getElementById('nIterationsCyclesSliderLabel').innerText = "Number of Iterations per Cycles (" + this.value +")";
+                    performEB();
+                    drawEdges();
+                });
+
+            menu.append("label")
+                .attr("for", "KSlider")
+                .attr("id", "KSliderLabel")
+                .text("Bundling constant (0.1)");
+
+            menu.append("input")
+                .attr("type", "range")
+                .attr("value", 10)
+                .attr("id", "KSlider")
+                .attr("min", 0)
+                .attr("max", 100)
+                .attr("step", 5)
+                .on("change", function () {
+                    document.getElementById('KSliderLabel').innerText = "Bundling constant (" + this.value/100 +")";
+                    performEB();
+                    drawEdges();
+                });
+
+            menu.append("label")
+                .attr("for", "thresholdSlider")
+                .attr("id", "thresholdSliderLabel")
+                .text("Compatibility Threshold (0.6)");
+
+            menu.append("input")
+                .attr("type", "range")
+                .attr("value", 6)
+                .attr("id", "thresholdSlider")
+                .attr("min", 1)
+                .attr("max", 10)
+                .attr("step", 0.5)
+                .on("change", function () {
+                    document.getElementById('thresholdSliderLabel').innerText = "Compatibility Threshold (" + this.value/10 +")";
+                    performEB();
+                    drawEdges();
+                });
+        };
+
+        loadData = function () {
+            Papa.parse("bundling_data/nw.csv",{
+                download: true,
+                dynamicTyping: true,
+                delimiter: ',',
+                header: false,
+                complete: function(results){
+                    nw = results.data;
+                    createEdges();
+                    console.log("Network loaded");
+                }
+            });
+
+            Papa.parse("bundling_data/locations.csv",{
+                download: true,
+                dynamicTyping: true,
+                delimiter: ',',
+                header: false,
+                complete: function(results){
+                    locations = results.data;
+                    // relocate the nodes around the origin
+                    var xCentroid = d3.mean(locations, function(d){ return (d[1]); });
+                    var yCentroid = d3.mean(locations, function(d){ return (d[2]); });
+                    var zCentroid = d3.mean(locations, function(d){ return (d[3]); });
+
+                    for (var i = 0; i < locations.length; i++) {
+                        nnodes.push(new THREE.Vector3(locations[i][1]-xCentroid,locations[i][2]-yCentroid,locations[i][3]-zCentroid))
+                    }
+                    console.log("Nodes loaded");
+                    performEB();
+                    visualizeResults();
+                }
+            });
+        };
+
+
+
+        // create normal edge geometry: sphere or cube
+        createNormalGeometry = function(hemisphere) {
+            if(hemisphere == 1){
+                return new THREE.SphereGeometry( dimensionFactor * shpereRadius, sphereResolution, sphereResolution);
+            } else if(hemisphere == 2){
+                var side = dimensionFactor * shpereRadius;
+                return new THREE.BoxGeometry( side, side, side);
+            }
+        };
+
+        // return the material for an edge according to its state: active or transparent
+        getNormalMaterial = function(area) {
+            return new THREE.MeshPhongMaterial({
+                        color: colorMap[area],
+                        shininess: 15,
+                        transparent: false,
+                        specular: 0x222222,
+                        reflectivity:1.3,
+                        opacity: 1.0
+                    });
+        };
+
+        drawRegions = function () {
+            for(var i=0; i < nnodes.length; i++){
+                glyphs[i] = new THREE.Mesh(createNormalGeometry(locations[i][4]), getNormalMaterial(locations[i][5]));
+                glyphs[i].position.set(nnodes[i].x, nnodes[i].y, nnodes[i].z);
+                scene.add(glyphs[i]);
+            }
+        };
+
+        drawEdges = function () {
+            if (edges.length > 0) {
+                for (var i = 0; i < edges.length; i++)
+                    scene.remove(edges[i])
+            }
+            for (var i = 0; i < results.length; i++) {
+                var material = new THREE.LineBasicMaterial({color: 0x1f77b4});
+                material.transparent = true;
+                material.opacity = 0.5;
+                var geometry = new THREE.Geometry();
+                geometry.vertices = results[i];
+                edges[i]  = new THREE.Line(geometry, material);
+                scene.add(edges[i]);
+            }
+        };
+
+        initScene = function () {
+            renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+            canvas.appendChild(renderer.domElement);
+
+            camera.position.z = 50;
+
+            //Adding light
+            scene.add( new THREE.HemisphereLight(0x606060, 0x080820, 1.5));
+            scene.add( new THREE.AmbientLight(0x606060, 1.5));
+            var light = new THREE.PointLight( 0xffffff, 1.0, 10000 );
+            light.position.set( 1000, 1000, 100 );
+            scene.add(light);
+
+            var axisHelper = new THREE.AxisHelper( 5 );
+            scene.add( axisHelper );
+        };
+
+        createCanvas = function() {
+            scene = new THREE.Scene();
+            canvas = document.getElementById('canvas');
+            renderer = new THREE.WebGLRenderer({antialias: true});
+            camera = new THREE.PerspectiveCamera(75, canvas.clientWidth / canvas.clientHeight, 0.1, 3000);
+            initScene();
+            controls = new THREE.TrackballControls(camera, renderer.domElement);
+            controls.rotateSpeed = 0.5;
+        };
+
+        animate = function () {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        };
+
+        visualizeResults = function () {
+            createCanvas();
+            drawRegions();
+            drawEdges();
+            animate();
+        };
+
+        createEdges = function () {
+            for (var i = 0; i < nw.length; i++) {
+                for (var j = i; j < nw.length; j++) {
+                    if (nw[i][j] > 0) {
+                        eedges.push({
+                            'source': i,
+                            'target': j
+                        })
+                    }
+                }
+            }
+        };
+
+        performEB = function () {
+            console.log("Processing ... ");
+            var nCycles = parseInt(document.getElementById('nCyclesSlider').value);
+            var nIterations = parseInt(document.getElementById('nIterationsCyclesSlider').value);
+            var K = parseFloat(document.getElementById('KSlider').value)/100;
+            var t = parseFloat(document.getElementById('thresholdSlider').value)/10;
+
+            // try webgl version
+            gpfBundling = d3.GPUForceEdgeBundling().nodes(nnodes).edges(eedges).cycles(nCycles).
+            iterations(nIterations).bundling_stiffness(K).compatibility_threshold(t);
+            console.time("GPU EB ");
+            results = gpfBundling();
+            console.timeEnd("GPU EB ");
+            time += gpfBundling.processing_time();
+        };
+
+        $(function () {
+            addControlSliders();
+            loadData();
+        })
+
+    </script>
+</body>
+</html>
