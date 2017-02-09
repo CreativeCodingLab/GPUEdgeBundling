@@ -202,6 +202,7 @@
 		}
 
 		function compute_compatibility_lists() {
+            compatibility_list_for_edge = [];
             for (var i = 0; i < data_edges.length; i++) {
                 compatibility_list_for_edge[i] = []; //0 compatible edges.
             }
@@ -284,6 +285,7 @@
 				return data_edges;
 			} else {
 				data_edges = filter_self_loops(ll); //remove edges to from to the same point
+                subdivision_points_for_edge = [];
 			}
 
 			return forcebundle;
