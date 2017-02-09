@@ -200,6 +200,7 @@
             programCompatibility = null;
             programSubdivision = null;
             programUpdate = null;
+            programsCreated = false;
         }
 
         function doBundling() {
@@ -419,6 +420,11 @@
                 compatibility_threshold = t;
             }
 
+            return forcebundle;
+        };
+
+        forcebundle.enable_keep_programs = function (enable) {
+            keepPrograms = enable;
             return forcebundle;
         };
 
