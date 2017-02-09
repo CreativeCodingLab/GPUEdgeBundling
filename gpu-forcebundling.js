@@ -21,24 +21,27 @@
             I_initial = 90, // 90, init. number of iterations for cycle
             I = I_initial,
             I_rate = 0.6666667, // rate at which iteration number decreases i.e. 2/3
+            compatibility_list = [],
             compatibility_threshold = 0.6;
 
         // WebGL stuff
-        var gpgpuUility = null,
-            gl = null, // gl context
+        var gpgpuUility = new vizit.utility.GPGPUtility(1, 1, false, {premultipliedAlpha:false}),
+            gl = gpgpuUility.getGLContext(), // gl context
             programCompatibility = null, // openGL compatibility program
             programSubdivision = null, // opengGL subdivision program
             programUpdate = null, // opengGL update program
             textures = [], // matrices to store the bundled edges, review Algorithm section in the paper
             shaderUniforms = [],
             writeTex = 0, readTex = 1, comTex = 2,
+            compatibilityTexture3 = null,
             compatibilityTexture = null,
             frameBuffer = null,
             maxNCompatibleEdges = 500,
             nRows, nColumns, // number of rows and columns of the problem
-            maxTextureSize, // max texture size of the GPU used
-            nTiles = 1, // number of tiles in case nEdges > maxTextureSize
-            time = 0;
+            maxTextureSize = gpgpuUility.getMaxTextureSize(), // max texture size of the GPU used
+            nTiles = 1,  // number of tiles in case nEdges > maxTextureSize
+            keepPrograms = false, // keep the programs in case the object is to be reused for other edges
+            programsCreated = false;
 
             // get uniform locations from the shader program
         function storeUniformsLocation() {
@@ -112,8 +115,6 @@
 
         function initializeWebGL() {
             // analyze the required memory, if the number of edges surpasses the max texture size, tiling is performed
-            gpgpuUility = new vizit.utility.GPGPUtility(1, 1, false, {premultipliedAlpha:false});
-            maxTextureSize = gpgpuUility.getMaxTextureSize();
             nTiles = Math.ceil(nEdges/maxTextureSize);
             // console.log("Problem requires " + nTiles + " tiles");
             if (nTiles > 1)
@@ -125,7 +126,6 @@
             }
 
             gpgpuUility.setProblemSize(nColumns, nRows);
-            gl = gpgpuUility.getGLContext();
             var canvas = gpgpuUility.getCanvas();
             canvas.addEventListener("webglcontextlost", function(event) {
                 event.preventDefault();
@@ -150,7 +150,7 @@
                 pixels.setTo(rr,1+offset,1,nodes[edges[e].target].y);
                 pixels.setTo(rr,1+offset,2,nodes[edges[e].target].z);
             }
-
+            // console.log("Input pixels");
             // console.log(pixels);
             textures[writeTex]  = gpgpuUility.makeSizedTexture(nColumns, nRows, gl.RGBA, gl.FLOAT, null); // target
             textures[readTex]   = gpgpuUility.makeSizedTexture(nColumns, nRows, gl.RGBA, gl.FLOAT, pixels); // source
@@ -158,7 +158,28 @@
             compatibilityTexture = gpgpuUility.makeSizedTexture(nTiles*maxNCompatibleEdges, nRows, gl.RGBA, gl.FLOAT, null);
         }
 
+        function initCompatibilityTexture() {
+            var pixels = create2DArray(nRows,nTiles*maxNCompatibleEdges,4);
+            pixels.fill(-1.);
+            var offset, row;
+            for (var e = 0; e < nEdges; e++) {
+                row = e % nRows;
+                offset = Math.floor(e/nRows)*maxNCompatibleEdges;
+                for (var c = 0; c < compatibility_list[e].length; c++) {
+                    pixels.setTo(row, c+offset, 0, compatibility_list[e][c]);
+                }
+            }
+            console.log(compatibility_list);
+
+            compatibilityTexture3 = gpgpuUility.makeSizedTexture(nTiles*maxNCompatibleEdges, nRows, gl.RGBA, gl.FLOAT, pixels);
+        }
+
+
         function deleteTexture() {
+            for (var unit = 0; unit < 3; ++unit) {
+                gl.activeTexture(gl.TEXTURE0 + unit);
+                gl.bindTexture(gl.TEXTURE_2D, null);
+            }
             gl.deleteTexture(textures[0]);
             gl.deleteTexture(textures[1]);
             gl.deleteTexture(compatibilityTexture);
@@ -166,16 +187,29 @@
 
         function createPrograms() {
             // Note that the preprocessor requires the newlines.
-            programSubdivision = gpgpuUility.createProgram(null, gpgpuUility.loadShader('../subdivision.glsl'));
-            programUpdate = gpgpuUility.createProgram(null, gpgpuUility.loadShader('../update.glsl'));
-            programCompatibility = gpgpuUility.createProgram(null, gpgpuUility.loadShader('../compatibility.glsl'));
+            programSubdivision = gpgpuUility.createProgram(null, gpgpuUility.loadShader('./js/utils/subdivision.glsl'));
+            programUpdate = gpgpuUility.createProgram(null, gpgpuUility.loadShader('./js/utils/update.glsl'));
+            programCompatibility = gpgpuUility.createProgram(null, gpgpuUility.loadShader('./js/utils/compatibility.glsl'));
+            programsCreated = true;
+        }
+
+        function deletePrograms() {
+            gpgpuUility.deleteProgram(programCompatibility);
+            gpgpuUility.deleteProgram(programSubdivision);
+            gpgpuUility.deleteProgram(programUpdate);
+            programCompatibility = null;
+            programSubdivision = null;
+            programUpdate = null;
         }
 
         function doBundling() {
             S = S_initial;
             I = I_initial;
             P = P_initial;
+            oldP = 0.5;
 
+            gl.clearColor(0.,0.,0.,1.);
+            gl.clear(gl.COLOR_BUFFER_BIT);
             // prepare edge compatibility list
             gpgpuUility.setProblemSize(nTiles*maxNCompatibleEdges, nRows);
             gpgpuUility.useProgram(programCompatibility);
@@ -227,35 +261,44 @@
             }
         }
 
+        // free resources
+        function freeResources() {
+            if (!keepPrograms)
+                deletePrograms();
+            deleteTexture();
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            gl.deleteFramebuffer(frameBuffer);
+            frameBuffer = null;
+            gpgpuUility.setProblemSize(1,1);
+        }
+
         var forcebundle = function () {
             nPoints = P_initial*Math.pow(P_rate, C)+2;
             //console.log("Expected output = " + nPoints + " points");
 
-            console.time("GPU Preparation Time taken ");
+            // console.time("GPU Preparation Time taken ");
             initializeWebGL();
             frameBuffer = gpgpuUility.createFramebuffer();
             initTexture();
-            createPrograms();
-            storeUniformsLocation();
+            if (!(keepPrograms && programsCreated)) {
+                createPrograms();
+                storeUniformsLocation();
+            }
             gl.finish();
-            console.timeEnd("GPU Preparation Time taken ");
+            // console.timeEnd("GPU Preparation Time taken ");
 
-            var start = Date.now();
-            console.time("GPU Time taken ");
+            // console.time("GPU Time taken ");
             doBundling();
             gl.finish();
-            console.timeEnd("GPU Time taken ");
-            time = Date.now() - start;
-
-            gpgpuUility.deleteProgram(programCompatibility);
-            gpgpuUility.deleteProgram(programSubdivision);
-            gpgpuUility.deleteProgram(programUpdate);
+            // console.timeEnd("GPU Time taken ");
 
             gpgpuUility.attachFrameBuffer(frameBuffer, gl.COLOR_ATTACHMENT0, textures[readTex]);
             var data = gpgpuUility.downloadTexture(textures[readTex], nColumns, nRows, gl.FLOAT, true);
 
+            // console.log("Output pixels");
             // console.log(data);
-            deleteTexture();
+
+            freeResources();
 
             var offset, rr;
 
@@ -377,10 +420,6 @@
             }
 
             return forcebundle;
-        };
-
-        forcebundle.processing_time = function () {
-            return time;
         };
 
         /*** ************************ ***/
