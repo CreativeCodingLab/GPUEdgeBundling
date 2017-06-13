@@ -126,7 +126,7 @@
                     max_y = Math.max(max_y, y);
                 }
 
-                for (var i = 0; i < raw_edges.length; i++) {
+                for (var i = 0; i < 1000 /*raw_edges.length*/; i++) {
                     eedges.push({
                         'source': raw_edges[i].getAttribute('source'),
                         'target': raw_edges[i].getAttribute('target')
@@ -160,7 +160,7 @@
             fbundling = d3.ForceEdgeBundling().nodes(nnodes).edges(eedges).cycles(nCycles).
             iterations(nIterations).bundling_stiffness(K).compatibility_threshold(t);
             console.time("CPU EB ");
-            results = fbundling();
+            //results = fbundling();
             console.timeEnd("CPU EB ");
 
             // try webgl version
@@ -169,7 +169,7 @@
             console.time("GPU EB ");
             results = gpfBundling();
             console.timeEnd("GPU EB ");
-            time += gpfBundling.processing_time();
+            //time += gpfBundling.processing_time();
         };
 
         prepareSvg = function () {
