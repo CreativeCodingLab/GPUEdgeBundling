@@ -656,7 +656,7 @@ window.vizit.utility = window.vizit.utility || {};
             req.setRequestHeader("Pragma", "no-cache");
             req.setRequestHeader("If-Modified-Since", "Sat, 1 Jan 2000 00:00:00 GMT");
             req.send(null);
-            return (req.status == 200) ? req.responseText : null;
+            return (req.status === 200) ? req.responseText : null;
         };
 
         /**

@@ -187,9 +187,9 @@
 
         function createPrograms() {
             // Note that the preprocessor requires the newlines.
-            programSubdivision = gpgpuUility.createProgram(null, gpgpuUility.loadShader('./js/utils/subdivision.glsl'));
-            programUpdate = gpgpuUility.createProgram(null, gpgpuUility.loadShader('./js/utils/update.glsl'));
-            programCompatibility = gpgpuUility.createProgram(null, gpgpuUility.loadShader('./js/utils/compatibility.glsl'));
+            programSubdivision = gpgpuUility.createProgram(null, gpgpuUility.loadShader('../subdivision.glsl'));
+            programUpdate = gpgpuUility.createProgram(null, gpgpuUility.loadShader('../update.glsl'));
+            programCompatibility = gpgpuUility.createProgram(null, gpgpuUility.loadShader('../compatibility.glsl'));
             programsCreated = true;
         }
 
