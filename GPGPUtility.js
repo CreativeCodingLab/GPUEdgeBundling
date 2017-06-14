@@ -61,13 +61,15 @@ window.vizit.utility = window.vizit.utility || {};
         var canvas;
         /** @member {WebGLRenderingContext} gl The WebGL context associated with the canvas. */
         var gl;
+        var isWebGL2 = false;
         //var canvasHeight, canvasWidth;
         var problemHeight, problemWidth;
         var standardVertexShader;
         var standardVertices;
         /** @member {Object} Non null if we enable OES_texture_float. */
-        var textureFloat;
-        var depthExtension;
+        var textureFloat = null;
+        var depthExtension = null;
+        var webGL2ColorBufferFloat = null;
         var outputTexture;
         var outputDataType;
         var maxTextureSize;
@@ -85,7 +87,7 @@ window.vizit.utility = window.vizit.utility || {};
         this.makeGPCanvas = function (canvasWidth, canvasHeight, showCanvas)
         {
             var canvas = document.createElement('canvas');
-            canvas.id ='ComputationCanvas';
+            canvas.id = 'ComputationCanvas';
             canvas.width  = canvasWidth;
             canvas.height = canvasHeight;
 
@@ -112,7 +114,16 @@ window.vizit.utility = window.vizit.utility || {};
             // Only fetch a gl context if we haven't already
             if(!gl)
             {
-                gl = canvas.getContext("webgl", attributes) || canvas.getContext('experimental-webgl', attributes);
+                // try first webgl 2
+                gl = canvas.getContext( 'webgl2', { antialias: false } );
+
+                isWebGL2 = !!gl;
+                if(isWebGL2) {
+                    console.log("WebGL 2 is available.");
+                } else {
+                    console.log("WebGL 2 is not available, trying WebGL 1.");
+                    gl = canvas.getContext("webgl", attributes) || canvas.getContext('experimental-webgl', attributes);
+                }
             }
 
             return gl;
@@ -291,12 +302,11 @@ window.vizit.utility = window.vizit.utility || {};
             var frameBuffer = null;
             if (!textureBoundToBuffer) {
                 frameBuffer = gl.createFramebuffer();
-                this.attachFrameBuffer(frameBuffer, gl.COLOR_ATTACHMENT0, texture);
+                this.attachFrameBuffer(frameBuffer, gl.COLOR_ATTACHMENT0, 'read', texture);
             }
 
-            var data = create2DArray(height,width,4);
             // var data = new Uint32Array(height*width*nComponents);
-            // Read a 1x1 block of pixels, a single pixel
+            var data = create2DArray(height,width,4);
             gl.bindTexture(gl.TEXTURE_2D, texture);
             gl.readPixels(  0,                  // x-coord of lower left corner
                             0,                  // y-coord of lower left corner
@@ -316,16 +326,18 @@ window.vizit.utility = window.vizit.utility || {};
         /**
          * Create a width x height texture of the given type for computation.
          * Width and height are usually equal, and must be powers of two.
+         * Follow https://www.khronos.org/registry/OpenGL-Refpages/es3.0/html/glTexImage2D.xhtml
          *
          * @param {integer} width The width of the texture in pixels. Normalized to s in texture coordinates.
          * @param {integer} height The height of the texture in pixels. Normalized to t in texture coordinates.
-         * @param {number} format data format: RGB, RGBA, etc
+         * @param {number} internalformat data format: WebGL 1.: RGB, RGBA, WebGL 2.: RGBA16F, RGBA32F, RGBA8UI, ...
+         * @param {number} format data format: WebGL 1. = internalformat, WebGL 2. = RGB, RGBA, RGBA_INTEGER, ...
          * @param {number} type A valid texture type. FLOAT, UNSIGNED_BYTE, etc.
-         * @param {number[] | null} data Either texture data, or null to allocate the texture but leave the texels undefined.
+         * @param {ArrayBufferView | null} data Either texture data, or null to allocate the texture but leave the texels undefined.
          *
          * @returns {WebGLTexture} A reference to the created texture on the GPU.
          */
-        this.makeSizedTexture = function (width, height, format, type, data)
+        this.makeSizedTexture = function (width, height, internalformat, format, type, data)
         {
             if (width > maxTextureSize || height > maxTextureSize) {
                 console.error("Texture dimensions exceeds GPU capabilities. Check max texture size.");
@@ -341,10 +353,10 @@ window.vizit.utility = window.vizit.utility || {};
             // Pixel format and data for the texture
             gl.texImage2D(  gl.TEXTURE_2D, // Target, matches bind above.
                             0,             // Level of detail.
-                            format,        // Internal format.
+                            internalformat,// Internal format.
                             width,         // Width - normalized to s.
                             height,        // Height - normalized to t.
-                            0,             // Always 0 in OpenGL ES.
+                            0,             // Border Always 0 in OpenGL ES.
                             format,        // Format for each pixel.
                             type,          // Data type for each chanel.
                             data);         // Image data in the described format, or null.
@@ -367,7 +379,7 @@ window.vizit.utility = window.vizit.utility || {};
         this.makeTexture = function (type, data)
         {
             outputDataType = type;
-            outputTexture = this.makeSizedTexture(problemWidth, problemHeight, gl.RGBA, type, data);
+            outputTexture = this.makeSizedTexture(problemWidth, problemHeight, gl.RGBA, gl.RGBA, type, data);
             return outputTexture;
         };
 
@@ -386,15 +398,27 @@ window.vizit.utility = window.vizit.utility || {};
          *
          * @param {WebGLFramebuffer} frameBuffer frame buffer
          * @param {Number} attachment COLOR_ATTACHMENT0, COLOR_ATTACHMENT1 etc
+         * @param {String} targetType 'draw' or 'read'
          * @param {WebGLTexture} texture The texture to be used as the buffer in this framebuffer object. The texture
          *                                  has to be of RGBA format to be attachable.
          */
 
-        this.attachFrameBuffer = function (frameBuffer, attachment, texture)
+        this.attachFrameBuffer = function (frameBuffer, attachment, targetType, texture)
         {
+            var target = gl.FRAMEBUFFER;
+            if (isWebGL2) {
+                switch (targetType){
+                    case ('read'):
+                        target = gl.READ_FRAMEBUFFER;
+                        break;
+                    case ('draw'):
+                        target = gl.DRAW_FRAMEBUFFER;
+                        break;
+                }
+            }
             // Make it the target for framebuffer operations - including rendering.
-            gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
-            gl.framebufferTexture2D(gl.FRAMEBUFFER,         // The target is always a FRAMEBUFFER.
+            gl.bindFramebuffer(target, frameBuffer);
+            gl.framebufferTexture2D(target,                 // The target draw or read.
                                     attachment,             // We are providing the color buffer.
                                     gl.TEXTURE_2D,          // This is a 2D image texture.
                                     texture,                // The texture.
@@ -668,6 +692,10 @@ window.vizit.utility = window.vizit.utility || {};
             return maxTextureSize;
         } ;
 
+        this.isWebGL2 = function () {
+            return isWebGL2;
+        };
+
         //canvasHeight  = height_;
         problemHeight = height_;
         //canvasWidth   = width_;
@@ -676,8 +704,16 @@ window.vizit.utility = window.vizit.utility || {};
         canvas        = this.makeGPCanvas(problemWidth, problemHeight, showCanvas);
         gl            = this.getGLContext();
         // Attempt to activate the extension, returns null if unavailable
-        textureFloat  = gl.getExtension('OES_texture_float');
-        depthExtension = gl.getExtension("WEBGL_depth_texture");
+        if (!isWebGL2) {
+            // allow floating point textures
+            // https://www.khronos.org/registry/webgl/extensions/OES_texture_float/
+            textureFloat = gl.getExtension('OES_texture_float');
+            depthExtension = gl.getExtension("WEBGL_depth_texture");
+        } else {
+            // for WebGL 2: allow floating color buffer
+            // https://www.khronos.org/registry/webgl/extensions/EXT_color_buffer_float/
+            webGL2ColorBufferFloat = gl.getExtension('EXT_color_buffer_float');
+        }
         // Get max texture size: we can make a maxTextureSize X maxTextureSize texture if we have enough memory
         // it is up to the user to compute if the problem fits in the GPU memory
         maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
