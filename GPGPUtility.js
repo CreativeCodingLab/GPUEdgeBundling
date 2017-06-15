@@ -119,9 +119,9 @@ window.vizit.utility = window.vizit.utility || {};
 
                 isWebGL2 = !!gl;
                 if(isWebGL2) {
-                    console.log("WebGL 2 is available.");
+                    console.log("GPGPUtility: WebGL 2 is available.");
                 } else {
-                    console.log("WebGL 2 is not available, trying WebGL 1.");
+                    console.log("GPGPUtility: WebGL 2 is not available, using WebGL 1.");
                     gl = canvas.getContext("webgl", attributes) || canvas.getContext('experimental-webgl', attributes);
                 }
             }
@@ -277,7 +277,7 @@ window.vizit.utility = window.vizit.utility || {};
         this.getResults = function ()
         {
             if (!outputTexture) {
-                console.log("Output texture not defined, please call makeTexture()");
+                console.log("GPGPUtility: Output texture not defined, please call makeTexture()");
                 return null;
             }
 
@@ -340,7 +340,7 @@ window.vizit.utility = window.vizit.utility || {};
         this.makeSizedTexture = function (width, height, internalformat, format, type, data)
         {
             if (width > maxTextureSize || height > maxTextureSize) {
-                console.error("Texture dimensions exceeds GPU capabilities. Check max texture size.");
+                console.error("GPGPUtility: Texture dimensions exceeds GPU capabilities. Check max texture size.");
             }
             // Create the texture
             var texture = gl.createTexture();
@@ -516,7 +516,7 @@ window.vizit.utility = window.vizit.utility || {};
                                     + "  vTextureCoord = textureCoord;"
                                     + "}";
 
-                //console.log("Using default vertex shader");
+                //console.log("GPGPUtility: Using default vertex shader");
             }
 
             return vertexShaderSource;
@@ -547,7 +547,7 @@ window.vizit.utility = window.vizit.utility || {};
             var vertexShader = this.compileShader(vertexShaderSource, gl.VERTEX_SHADER);
             var compiled = gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS);
             if (compiled) {
-                //console.log('Vertex shader compiled successfully');
+                //console.log('GPGPUtility: Vertex shader compiled successfully');
             }
             else {
                 console.log('Vertex shader compiler log: ' + gl.getShaderInfoLog(vertexShader));
@@ -555,10 +555,10 @@ window.vizit.utility = window.vizit.utility || {};
             var fragmentShader = this.compileShader(fragmentShaderSource, gl.FRAGMENT_SHADER);
             compiled = gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS);
             if (compiled) {
-                //console.log('Fragment shader compiled successfully');
+                //console.log('GPGPUtility: Fragment shader compiled successfully');
             }
             else {
-                console.log('Fragment shader compiler log: ' + gl.getShaderInfoLog(fragmentShader));
+                console.log('GPGPUtility: Fragment shader compiler log: ' + gl.getShaderInfoLog(fragmentShader));
             }
             // The program consists of our shaders
             gl.attachShader(program, vertexShader);
@@ -569,7 +569,7 @@ window.vizit.utility = window.vizit.utility || {};
             // Shaders are checked for consistency.
             gl.linkProgram(program);
             if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-                console.error('ERROR linking program!', gl.getProgramInfoLog(program));
+                console.error('GPGPUtility: ERROR linking program!', gl.getProgramInfoLog(program));
             }
 
             // Shaders are no longer needed as separate objects
@@ -596,7 +596,7 @@ window.vizit.utility = window.vizit.utility || {};
 
             gl.validateProgram(program);
             if (!gl.getProgramParameter(program, gl.VALIDATE_STATUS)) {
-                console.error('ERROR validating program!', gl.getProgramInfoLog(program));
+                console.error('GPGPUtility: ERROR validating program!', gl.getProgramInfoLog(program));
                 return false;
             }
             return true;
